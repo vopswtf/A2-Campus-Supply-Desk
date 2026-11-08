@@ -2,6 +2,24 @@
 
 from supplydesk.storage import JsonStore
 
+# order rules
+CUSTOMER_TYPES = ("regular", "student")
+FULFILLMENT_OPTIONS = ("pickup", "delivery")
+MIN_QUANTITY = 1
+MAX_QUANTITY = 99
+
+# prices (cents)
+STUDENT_DISCOUNT_MINIMUM_CENTS = 5000
+STUDENT_DISCOUNT_PERCENT = 10
+DELIVERY_FEE_CENTS = 600
+FREE_DELIVERY_MINIMUM_CENTS = 10000
+
+# orders
+ORDER_ID_PREFIX = "ORD-"
+ORDER_NUMBER_DIGITS = 4 # padding for zeros
+
+STATUS_PLACED = "placed"
+STATUS_CANCELLED = "cancelled"
 
 class OrderService:
     def __init__(self, state_path=".supplydesk/state.json"):
@@ -12,10 +30,10 @@ class OrderService:
 
     def quote(self, customer_type, items, fulfillment="pickup"):
         state = self.store.load()
-        if customer_type not in ("regular", "student"):
-            raise ValueError("Customer type must be regular or student.")
-        if fulfillment not in ("pickup", "delivery"):
-            raise ValueError("Fulfillment must be pickup or delivery.")
+        if customer_type not in CUSTOMER_TYPES:
+            raise ValueError("Customer type must be one of: " + ", ".join(CUSTOMER_TYPES))
+        if fulfillment not in FULFILLMENT_OPTIONS:
+            raise ValueError("Fulfillment must be one of: " + ", ".join(FULFILLMENT_OPTIONS))
         if not isinstance(items, list) or not items:
             raise ValueError("An order must contain at least one item.")
         lines = []
@@ -31,8 +49,8 @@ class OrderService:
             if product is None:
                 raise ValueError("Unknown product.")
             quantity = item.get("quantity")
-            if type(quantity) is not int or quantity < 1 or quantity > 99:
-                raise ValueError("Quantity must be an integer from 1 to 99.")
+            if type(quantity) is not int or quantity < MIN_QUANTITY or quantity > MAX_QUANTITY:
+                raise ValueError("Quantity must be an integer from " + str(MIN_QUANTITY) + " to " + str(MAX_QUANTITY) + ".")
             if quantity > product["stock"]:
                 raise ValueError("Not enough stock for " + product["product_id"] + ".")
             line_total = product["unit_price_cents"] * quantity
@@ -44,12 +62,17 @@ class OrderService:
                 "quantity": quantity,
                 "line_total_cents": line_total,
             })
+
+        # Discount
         discount = 0
-        if customer_type == "student" and subtotal > 5000:
-            discount = (subtotal * 10 + 50) // 100
+        if customer_type == "student" and subtotal > STUDENT_DISCOUNT_MINIMUM_CENTS:
+            discount = (subtotal * STUDENT_DISCOUNT_PERCENT + 50) // 100
+
+        # Delivery 
         delivery = 0
-        if fulfillment == "delivery" and subtotal - discount < 10000:
-            delivery = 600
+        if fulfillment == "delivery" and subtotal - discount < FREE_DELIVERY_MINIMUM_CENTS:
+            delivery = DELIVERY_FEE_CENTS
+
         return {
             "customer_type": customer_type,
             "fulfillment": fulfillment,
@@ -64,8 +87,8 @@ class OrderService:
         state = self.store.load()
         quote = self.quote(customer_type, items, fulfillment)
         order = {
-            "order_id": "ORD-" + str(state["next_order_number"]).zfill(4),
-            "status": "placed",
+            "order_id": ORDER_ID_PREFIX + str(state["next_order_number"]).zfill(ORDER_NUMBER_DIGITS),
+            "status": STATUS_PLACED,
             **quote, # puts all quote keys into order
         }
         for line in order["items"]:
@@ -100,6 +123,6 @@ class OrderService:
             for product in state["catalog"]:
                 if product["product_id"] == line["product_id"]:
                     product["stock"] += line["quantity"]
-        order["status"] = "cancelled"
+        order["status"] = STATUS_CANCELLED
         self.store.save(state)
         return order
