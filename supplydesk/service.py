@@ -4,13 +4,15 @@ from supplydesk.storage import JsonStore
 
 # order rules
 CUSTOMER_TYPES = ("regular", "student")
-FULFILLMENT_OPTIONS = ("pickup", "delivery")
+FULFILLMENT_OPTIONS = ("pickup", "delivery", "express")
 MIN_QUANTITY = 1
 MAX_QUANTITY = 99
 
 # prices (cents)
 STUDENT_DISCOUNT_MINIMUM_CENTS = 5000
 STUDENT_DISCOUNT_PERCENT = 10
+
+EXPRESS_FEE_CENTS = 1200
 DELIVERY_FEE_CENTS = 600
 FREE_DELIVERY_MINIMUM_CENTS = 10000
 
@@ -78,6 +80,9 @@ class OrderService:
         delivery = 0
         if fulfillment == "delivery" and subtotal - discount < FREE_DELIVERY_MINIMUM_CENTS:
             delivery = DELIVERY_FEE_CENTS
+
+        if fulfillment == "express":
+            delivery += EXPRESS_FEE_CENTS
 
         return {
             "customer_type": customer_type,
