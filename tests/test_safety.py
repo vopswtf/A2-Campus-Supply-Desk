@@ -113,6 +113,27 @@ class OrderSafetyTests(unittest.TestCase):
         self.assertEqual(orders[0]["status"], "cancelled")
         self.assertEqual(orders[1]["order_id"], "ORD-0002")
         self.assertEqual(orders[1]["status"], "placed")
+
+    # Invalid
+    # Same product on two lines, 15 + 15 = 30 notebooks but only 20 in stock (spec: combined quantity must not go over stock)
+    # Expected quote and place_order both raise ValueError, stock still 20, no orders saved
+    # Result FAIL before the fix (each line is only checked by itself)
+    def test_duplicate_lines_over_stock(self):
+        items = [{"product_id": "notebook", "quantity": 15}, {"product_id": "notebook", "quantity": 15}]
+
+        with self.assertRaises(ValueError):
+            self.service.quote("regular", items)
+
+        with self.assertRaises(ValueError):
+            self.service.place_order("regular", items)
+
+        # make sure stock never changed
+        for product in self.service.catalog():
+            if product["product_id"] == "notebook":
+                self.assertEqual(product["stock"], 20)
+
+        # make sure no orders were saved
+        self.assertEqual(self.service.list_orders(), [])
     
 if __name__ == "__main__":
     unittest.main()

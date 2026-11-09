@@ -71,6 +71,15 @@ class OrderService:
             subtotal += line_quote["line_total_cents"]
             lines.append(line_quote)
 
+        # Checking stock for possible duplicate lines in order
+        totals = {}
+        for line in lines:
+            totals[line["product_id"]] = totals.get(line["product_id"], 0) + line["quantity"]
+        
+        for product in state["catalog"]:
+            if product["product_id"] in totals and totals[product["product_id"]] > product["stock"]:
+                raise ValueError("Not enough stock for " + product["product_id"] + ".")
+
         # Discount
         discount = 0
         if customer_type == "student" and subtotal >= STUDENT_DISCOUNT_MINIMUM_CENTS:
@@ -134,6 +143,8 @@ class OrderService:
                 break
         if order is None:
             raise ValueError("Unknown order: " + order_id)
+        if order["status"] == STATUS_CANCELLED:
+            raise ValueError("Order is already cancelled: " + order_id)
         for line in order["items"]:
             self.change_stock(state, line["product_id"], line["quantity"])
 
